@@ -1,0 +1,56 @@
+services:
+  ninja-media-manager:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: ninja-media-manager
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - MEDIA_PATH=/media
+      - OUTPUT_PATH=/output
+      - CONFIG_PATH=/config
+    volumes:
+      # Mount your media folder here (read-only for safety)
+      - ${MEDIA_PATH:-./media}:/media:ro
+      # Configuration storage
+      - ./config:/config
+      # Output folder for extracted subtitles
+      - ./output:/output
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Development service with hot-reload
+  ninja-media-manager-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: ninja-media-manager-dev
+    ports:
+      - "${PORT:-8080}:8080"
+      - "5173:5173"  # Vite dev server
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - MEDIA_PATH=/media
+      - OUTPUT_PATH=/output
+      - CONFIG_PATH=/config
+    volumes:
+      - ${MEDIA_PATH:-./media}:/media:ro
+      - ./config:/config
+      - ./output:/output
+      # Mount source for hot-reload
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+    profiles:
+      - dev
+    restart: unless-stopped

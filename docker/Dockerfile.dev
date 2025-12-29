@@ -1,0 +1,50 @@
+# NinjaMediaManager Development Dockerfile
+# Includes hot-reload for both frontend and backend
+
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV MEDIA_PATH=/media
+ENV OUTPUT_PATH=/output
+ENV CONFIG_PATH=/config
+
+# Install system dependencies including Node.js
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    mkvtoolnix \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-nor \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Copy Python requirements and install
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy frontend package.json and install dependencies
+COPY frontend/package*.json ./frontend/
+RUN cd frontend && npm ci
+
+# Copy source code (will be overridden by volume mounts)
+COPY backend/ ./backend/
+COPY frontend/ ./frontend/
+
+# Create directories for volumes
+RUN mkdir -p /media /output /config
+
+# Expose ports
+EXPOSE 8080 5173
+
+# Start script that runs both frontend and backend
+COPY docker/dev-start.sh /app/dev-start.sh
+RUN chmod +x /app/dev-start.sh
+
+CMD ["/app/dev-start.sh"]

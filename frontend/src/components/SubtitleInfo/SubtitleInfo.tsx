@@ -1,0 +1,643 @@
+import { useState, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { subtitlesApi } from '../../api/client'
+import { FileItem, SpellCheckIssue } from '../../types/api'
+import {
+  FileText, Clock, HardDrive, Loader2, CheckCircle, AlertCircle,
+  SpellCheck, ChevronDown, Image, Save, X, Stamp
+} from 'lucide-react'
+
+interface SubtitleInfoProps {
+  file: FileItem
+}
+
+interface SpellCheckOptions {
+  replacePipeWithI: boolean
+  replaceFancyApostrophe: boolean
+  language: string
+}
+
+export function SubtitleInfo({ file }: SubtitleInfoProps) {
+  const queryClient = useQueryClient()
+  const [spellCheckOptions, setSpellCheckOptions] = useState<SpellCheckOptions>({
+    replacePipeWithI: true,
+    replaceFancyApostrophe: true,
+    language: 'en',
+  })
+  const [issues, setIssues] = useState<SpellCheckIssue[]>([])
+  const [currentIssueIndex, setCurrentIssueIndex] = useState(0)
+  const [invalidCharCount, setInvalidCharCount] = useState(0)
+  const [spellingCount, setSpellingCount] = useState(0)
+  const [hasPgsSource, setHasPgsSource] = useState(false)
+  const [pgsImage, setPgsImage] = useState<string | null>(null)
+  const [pgsImageLoading, setPgsImageLoading] = useState(false)
+  const [editText, setEditText] = useState('')
+  const [isEditing, setIsEditing] = useState(false)
+  const [stampOptions, setStampOptions] = useState({
+    startTime: '00:00:05,000',
+    endTime: '00:00:15,000',
+    text: 'Subtitles by NinjaNymo\nMade with NinjaMediaManager',
+  })
+  const [stampCollision, setStampCollision] = useState<{
+    hasCollision: boolean
+    collidingIndices: number[]
+    hasStamp: boolean
+  } | null>(null)
+  const [stampMessage, setStampMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['subtitleInfo', file.path],
+    queryFn: () => subtitlesApi.getInfo(file.path),
+  })
+
+  const spellCheckMutation = useMutation({
+    mutationFn: () => subtitlesApi.spellCheck(file.path, spellCheckOptions),
+    onSuccess: (result) => {
+      setIssues(result.issues || [])
+      setCurrentIssueIndex(0)
+      setInvalidCharCount(result.invalid_char_count)
+      setSpellingCount(result.spelling_count)
+      setHasPgsSource(result.has_pgs_source)
+      setPgsImage(null)
+      setIsEditing(false)
+    },
+  })
+
+  const editMutation = useMutation({
+    mutationFn: ({ index, newText }: { index: number; newText: string }) =>
+      subtitlesApi.editSubtitle(file.path, index, newText),
+    onSuccess: () => {
+      setIsEditing(false)
+      // Re-run spell check to refresh issues
+      spellCheckMutation.mutate()
+      // Invalidate subtitle info to refresh preview
+      queryClient.invalidateQueries({ queryKey: ['subtitleInfo', file.path] })
+    },
+  })
+
+  const checkCollisionMutation = useMutation({
+    mutationFn: () => subtitlesApi.checkStampCollision(file.path, stampOptions.startTime, stampOptions.endTime),
+    onSuccess: (result) => {
+      setStampCollision({
+        hasCollision: result.collision,
+        collidingIndices: result.colliding_subtitles,
+        hasStamp: result.has_stamp,
+      })
+    },
+  })
+
+  const addStampMutation = useMutation({
+    mutationFn: () => subtitlesApi.addStamp({
+      path: file.path,
+      start_time: stampOptions.startTime,
+      end_time: stampOptions.endTime,
+      text: stampOptions.text,
+    }),
+    onSuccess: (result) => {
+      if (result.success) {
+        setStampMessage({ type: 'success', text: result.message })
+        setStampCollision({ hasCollision: false, collidingIndices: [], hasStamp: true })
+        // Invalidate subtitle info to refresh preview
+        queryClient.invalidateQueries({ queryKey: ['subtitleInfo', file.path] })
+      } else {
+        setStampMessage({ type: 'error', text: result.message })
+        if (result.collision) {
+          setStampCollision({
+            hasCollision: true,
+            collidingIndices: result.colliding_subtitles,
+            hasStamp: false,
+          })
+        }
+      }
+    },
+    onError: (error: Error) => {
+      setStampMessage({ type: 'error', text: error.message })
+    },
+  })
+
+  // Load PGS image when viewing an issue with PGS source
+  const loadPgsImage = async (subtitleIndex: number) => {
+    if (!hasPgsSource) return
+    setPgsImageLoading(true)
+    setPgsImage(null)
+    try {
+      const result = await subtitlesApi.getPgsImage(file.path, subtitleIndex)
+      setPgsImage(result.image)
+    } catch (err) {
+      console.error('Failed to load PGS image:', err)
+    } finally {
+      setPgsImageLoading(false)
+    }
+  }
+
+  // Load PGS image when issue changes
+  useEffect(() => {
+    if (issues.length > 0 && hasPgsSource) {
+      const currentIssue = issues[currentIssueIndex]
+      if (currentIssue) {
+        loadPgsImage(currentIssue.index)
+        setEditText(currentIssue.text)
+      }
+    }
+  }, [currentIssueIndex, issues, hasPgsSource])
+
+  // Check stamp collision on initial load for SRT files
+  useEffect(() => {
+    if (file.name.toLowerCase().endsWith('.srt')) {
+      checkCollisionMutation.mutate()
+    }
+  }, [file.path])
+
+  const handleSaveEdit = () => {
+    const currentIssue = issues[currentIssueIndex]
+    if (currentIssue && editText !== currentIssue.text) {
+      editMutation.mutate({ index: currentIssue.index, newText: editText })
+    } else {
+      setIsEditing(false)
+    }
+  }
+
+  const formatSize = (bytes?: number) => {
+    if (!bytes) return 'Unknown'
+    const kb = bytes / 1024
+    if (kb >= 1024) {
+      const mb = kb / 1024
+      return `${mb.toFixed(1)} MB`
+    }
+    return `${kb.toFixed(1)} KB`
+  }
+
+  const currentIssue = issues[currentIssueIndex]
+
+  // Get highlight length based on issue type
+  const getHighlightLength = (issue: SpellCheckIssue) => {
+    if (issue.type === 'invalid_character') {
+      return 1
+    }
+    return issue.word?.length || 1
+  }
+
+  // Get the highlighted text to display
+  const getHighlightedText = (issue: SpellCheckIssue) => {
+    if (issue.type === 'invalid_character') {
+      return issue.character || '?'
+    }
+    return issue.word || '?'
+  }
+
+  const isSRT = file.name.toLowerCase().endsWith('.srt')
+
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center bg-matrix-bg">
+        <Loader2 className="w-8 h-8 animate-spin text-matrix-dim" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 bg-matrix-bg">
+        <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 text-red-500">
+          Error loading subtitle info: {(error as Error).message}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-full overflow-auto p-6 bg-matrix-bg">
+      {/* Header */}
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-matrix-green mb-2">{file.name}</h2>
+        <div className="flex items-center gap-4 text-sm text-matrix-dim">
+          <span className="flex items-center gap-1">
+            <HardDrive className="w-4 h-4" />
+            {formatSize(file.size)}
+          </span>
+          {data?.line_count && (
+            <span className="flex items-center gap-1">
+              <FileText className="w-4 h-4" />
+              {data.line_count} subtitles
+            </span>
+          )}
+          {data?.duration && (
+            <span className="flex items-center gap-1">
+              <Clock className="w-4 h-4" />
+              {data.duration}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Spell Check Section - only for SRT files */}
+      {isSRT && (
+        <div className="mb-6">
+          <h3 className="flex items-center gap-2 text-lg font-medium text-matrix-green mb-3">
+            <SpellCheck className="w-5 h-5 text-matrix-glow" />
+            Spell Check
+          </h3>
+
+          <div className="bg-matrix-bg border border-matrix-dim rounded-lg p-4 space-y-4">
+            {/* Options */}
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={spellCheckOptions.replacePipeWithI}
+                  onChange={(e) => setSpellCheckOptions({
+                    ...spellCheckOptions,
+                    replacePipeWithI: e.target.checked,
+                  })}
+                  className="w-4 h-4 rounded border-matrix-dim bg-matrix-bg text-matrix-green focus:ring-matrix-green"
+                />
+                <span className="text-sm text-matrix-darkgreen">
+                  Replace "|" with "I"
+                </span>
+              </label>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={spellCheckOptions.replaceFancyApostrophe}
+                  onChange={(e) => setSpellCheckOptions({
+                    ...spellCheckOptions,
+                    replaceFancyApostrophe: e.target.checked,
+                  })}
+                  className="w-4 h-4 rounded border-matrix-dim bg-matrix-bg text-matrix-green focus:ring-matrix-green"
+                />
+                <span className="text-sm text-matrix-darkgreen">
+                  Replace "'" with "'"
+                </span>
+              </label>
+
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-matrix-darkgreen">Language:</label>
+                <div className="relative">
+                  <select
+                    value={spellCheckOptions.language}
+                    onChange={(e) => setSpellCheckOptions({
+                      ...spellCheckOptions,
+                      language: e.target.value,
+                    })}
+                    className="appearance-none bg-matrix-bg border border-matrix-dim rounded px-3 py-1.5 pr-8 text-sm text-matrix-green focus:outline-none focus:border-matrix-green"
+                  >
+                    <option value="en">English</option>
+                    <option value="no">Norwegian</option>
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-matrix-dim pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            {/* Run button */}
+            <button
+              onClick={() => spellCheckMutation.mutate()}
+              disabled={spellCheckMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-matrix-darkgreen hover:bg-matrix-green hover:text-black rounded text-sm font-medium disabled:opacity-50 text-matrix-green transition-colors"
+            >
+              {spellCheckMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <SpellCheck className="w-4 h-4" />
+              )}
+              Run Spell Check
+            </button>
+
+            {/* Results */}
+            {spellCheckMutation.isSuccess && (
+              <div className="mt-4">
+                {spellCheckMutation.data.replacements_made > 0 && (
+                  <div className="flex items-center gap-2 text-matrix-glow mb-3">
+                    <CheckCircle className="w-5 h-5" />
+                    <span>Made {spellCheckMutation.data.replacements_made} character replacement{spellCheckMutation.data.replacements_made > 1 ? 's' : ''}</span>
+                  </div>
+                )}
+                {issues.length === 0 ? (
+                  <div className="flex items-center gap-2 text-matrix-green">
+                    <CheckCircle className="w-5 h-5" />
+                    <span>No issues found!</span>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-4 text-yellow-500">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5" />
+                        <span>{issues.length} issue{issues.length > 1 ? 's' : ''} found</span>
+                      </div>
+                      <div className="text-sm text-matrix-dim">
+                        ({invalidCharCount} invalid char{invalidCharCount !== 1 ? 's' : ''}, {spellingCount} spelling)
+                      </div>
+                    </div>
+
+                    {/* Issue navigation */}
+                    <div className="bg-matrix-bg border border-matrix-dim rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm text-matrix-dim">
+                            Issue {currentIssueIndex + 1} of {issues.length}
+                          </span>
+                          {currentIssue && (
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              currentIssue.type === 'invalid_character'
+                                ? 'bg-red-500/20 text-red-400'
+                                : 'bg-yellow-500/20 text-yellow-400'
+                            }`}>
+                              {currentIssue.type === 'invalid_character' ? 'Invalid Char' : 'Spelling'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setCurrentIssueIndex(Math.max(0, currentIssueIndex - 1))}
+                            disabled={currentIssueIndex === 0}
+                            className="px-3 py-1 bg-matrix-dim/30 hover:bg-matrix-dim/50 text-matrix-green rounded text-sm disabled:opacity-50"
+                          >
+                            Previous
+                          </button>
+                          <button
+                            onClick={() => setCurrentIssueIndex(Math.min(issues.length - 1, currentIssueIndex + 1))}
+                            disabled={currentIssueIndex === issues.length - 1}
+                            className="px-3 py-1 bg-matrix-dim/30 hover:bg-matrix-dim/50 text-matrix-green rounded text-sm disabled:opacity-50"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+
+                      {currentIssue && (
+                        <div className="space-y-3">
+                          <div className="text-sm">
+                            <span className="text-matrix-dim">Subtitle #{currentIssue.index}:</span>
+                          </div>
+
+                          {/* PGS Image Preview */}
+                          {hasPgsSource && (
+                            <div className="bg-matrix-bg border border-matrix-dim/50 rounded p-3">
+                              <div className="flex items-center gap-2 text-xs text-matrix-dim mb-2">
+                                <Image className="w-3 h-3" />
+                                Original PGS Image
+                              </div>
+                              {pgsImageLoading ? (
+                                <div className="flex items-center justify-center py-4">
+                                  <Loader2 className="w-5 h-5 animate-spin text-matrix-dim" />
+                                </div>
+                              ) : pgsImage ? (
+                                <img
+                                  src={`data:image/bmp;base64,${pgsImage}`}
+                                  alt={`Subtitle ${currentIssue.index}`}
+                                  className="max-w-full rounded border border-matrix-dim bg-matrix-bg"
+                                />
+                              ) : (
+                                <div className="text-xs text-matrix-dim py-2">
+                                  No image available
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* OCR Result / Edit */}
+                          <div className="bg-matrix-bg border border-matrix-dim/50 rounded p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs text-matrix-dim">OCR Result</span>
+                              {!isEditing && (
+                                <button
+                                  onClick={() => {
+                                    setEditText(currentIssue.text)
+                                    setIsEditing(true)
+                                  }}
+                                  className="text-xs text-matrix-green hover:text-matrix-glow"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
+                            {isEditing ? (
+                              <div className="space-y-2">
+                                <textarea
+                                  value={editText}
+                                  onChange={(e) => setEditText(e.target.value)}
+                                  className="w-full bg-matrix-bg border border-matrix-dim rounded p-2 font-mono text-sm text-matrix-green focus:outline-none focus:border-matrix-green"
+                                  rows={3}
+                                />
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={handleSaveEdit}
+                                    disabled={editMutation.isPending}
+                                    className="flex items-center gap-1 px-3 py-1 bg-matrix-darkgreen hover:bg-matrix-green hover:text-black rounded text-xs font-medium disabled:opacity-50 text-matrix-green transition-colors"
+                                  >
+                                    {editMutation.isPending ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <Save className="w-3 h-3" />
+                                    )}
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={() => setIsEditing(false)}
+                                    className="flex items-center gap-1 px-3 py-1 bg-matrix-dim/30 hover:bg-matrix-dim/50 text-matrix-green rounded text-xs"
+                                  >
+                                    <X className="w-3 h-3" />
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="font-mono text-sm">
+                                <span className="text-matrix-darkgreen">
+                                  {currentIssue.text.substring(0, currentIssue.position)}
+                                </span>
+                                <span className={`px-0.5 ${
+                                  currentIssue.type === 'invalid_character'
+                                    ? 'bg-red-500/30 text-red-300'
+                                    : 'bg-yellow-500/30 text-yellow-300'
+                                }`}>
+                                  {getHighlightedText(currentIssue)}
+                                </span>
+                                <span className="text-matrix-darkgreen">
+                                  {currentIssue.text.substring(currentIssue.position + getHighlightLength(currentIssue))}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Issue details */}
+                          {currentIssue.type === 'invalid_character' ? (
+                            <div className="text-xs text-matrix-dim">
+                              Invalid character: "{currentIssue.character}" (position {currentIssue.position})
+                            </div>
+                          ) : (
+                            <>
+                              <div className="text-sm">
+                                <span className="text-matrix-dim">Suggestions: </span>
+                                {currentIssue.suggestions.length > 0 ? (
+                                  <span className="text-matrix-glow">
+                                    {currentIssue.suggestions.join(', ')}
+                                  </span>
+                                ) : (
+                                  <span className="text-matrix-dim italic">No suggestions available</span>
+                                )}
+                              </div>
+
+                              {/* Quick fix buttons for spelling issues */}
+                              {currentIssue.suggestions.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  {currentIssue.suggestions.map((suggestion, i) => (
+                                    <button
+                                      key={i}
+                                      onClick={() => {
+                                        const newText = currentIssue.text.substring(0, currentIssue.position) +
+                                          suggestion +
+                                          currentIssue.text.substring(currentIssue.position + (currentIssue.word?.length || 0))
+                                        editMutation.mutate({ index: currentIssue.index, newText })
+                                      }}
+                                      disabled={editMutation.isPending}
+                                      className="px-3 py-1 bg-matrix-darkgreen hover:bg-matrix-green hover:text-black text-matrix-green rounded text-xs font-medium disabled:opacity-50 transition-colors"
+                                    >
+                                      Replace with "{suggestion}"
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Creator Stamp Section - only for SRT files */}
+      {isSRT && (
+        <div className="mb-6">
+          <h3 className="flex items-center gap-2 text-lg font-medium text-matrix-green mb-3">
+            <Stamp className="w-5 h-5 text-matrix-glow" />
+            Creator Stamp
+          </h3>
+
+          <div className="bg-matrix-bg border border-matrix-dim rounded-lg p-4 space-y-4">
+            {/* Check if stamp already exists */}
+            {stampCollision?.hasStamp ? (
+              <div className="flex items-center gap-2 text-matrix-glow">
+                <CheckCircle className="w-5 h-5" />
+                <span>Creator stamp already exists in this file</span>
+              </div>
+            ) : (
+              <>
+                {/* Time inputs */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-matrix-darkgreen mb-1">Start Time</label>
+                    <input
+                      type="text"
+                      value={stampOptions.startTime}
+                      onChange={(e) => {
+                        setStampOptions({ ...stampOptions, startTime: e.target.value })
+                        setStampMessage(null)
+                      }}
+                      onBlur={() => checkCollisionMutation.mutate()}
+                      placeholder="00:00:05,000"
+                      className="w-full bg-matrix-bg border border-matrix-dim rounded px-3 py-2 text-sm text-matrix-green font-mono focus:outline-none focus:border-matrix-green"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-matrix-darkgreen mb-1">End Time</label>
+                    <input
+                      type="text"
+                      value={stampOptions.endTime}
+                      onChange={(e) => {
+                        setStampOptions({ ...stampOptions, endTime: e.target.value })
+                        setStampMessage(null)
+                      }}
+                      onBlur={() => checkCollisionMutation.mutate()}
+                      placeholder="00:00:15,000"
+                      className="w-full bg-matrix-bg border border-matrix-dim rounded px-3 py-2 text-sm text-matrix-green font-mono focus:outline-none focus:border-matrix-green"
+                    />
+                  </div>
+                </div>
+
+                {/* Stamp text */}
+                <div>
+                  <label className="block text-sm text-matrix-darkgreen mb-1">Stamp Text</label>
+                  <textarea
+                    value={stampOptions.text}
+                    onChange={(e) => {
+                      setStampOptions({ ...stampOptions, text: e.target.value })
+                      setStampMessage(null)
+                    }}
+                    placeholder="Subtitles by..."
+                    rows={3}
+                    className="w-full bg-matrix-bg border border-matrix-dim rounded px-3 py-2 text-sm text-matrix-green focus:outline-none focus:border-matrix-green resize-none"
+                  />
+                </div>
+
+                {/* Collision warning */}
+                {stampCollision?.hasCollision && (
+                  <div className="flex items-start gap-2 text-yellow-500 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <div className="font-medium">Cannot add stamp</div>
+                      <div className="text-yellow-400">
+                        Conflicts with existing subtitle(s): #{stampCollision.collidingIndices.join(', #')}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Status message */}
+                {stampMessage && (
+                  <div
+                    className={`flex items-start gap-2 p-3 rounded-lg ${
+                      stampMessage.type === 'success'
+                        ? 'bg-matrix-dim/20 border border-matrix-darkgreen text-matrix-green'
+                        : 'bg-red-900/20 border border-red-800 text-red-500'
+                    }`}
+                  >
+                    {stampMessage.type === 'success' ? (
+                      <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    )}
+                    <span className="text-sm">{stampMessage.text}</span>
+                  </div>
+                )}
+
+                {/* Add Stamp button */}
+                <button
+                  onClick={() => {
+                    setStampMessage(null)
+                    addStampMutation.mutate()
+                  }}
+                  disabled={addStampMutation.isPending || stampCollision?.hasCollision || !stampOptions.text.trim()}
+                  className="flex items-center gap-2 px-4 py-2 bg-matrix-darkgreen hover:bg-matrix-green hover:text-black rounded text-sm font-medium disabled:opacity-50 text-matrix-green transition-colors"
+                >
+                  {addStampMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Stamp className="w-4 h-4" />
+                  )}
+                  Add Creator Stamp
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Preview section */}
+      {data?.preview && (
+        <div className="mb-6">
+          <h3 className="text-lg font-medium text-matrix-green mb-3">Preview</h3>
+          <div className="bg-matrix-bg border border-matrix-dim rounded-lg p-4 font-mono text-sm text-matrix-darkgreen whitespace-pre-wrap max-h-96 overflow-auto">
+            {data.preview}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

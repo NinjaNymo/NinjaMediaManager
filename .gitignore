@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker
+.docker/
+
+# App data
+config/
+output/
+media/
+
+# Test
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Claude Code
+.claude/
+
+# TypeScript
+*.tsbuildinfo
