@@ -13,7 +13,6 @@ A Docker-based web tool for managing MKV subtitles. Extract subtitle tracks, OCR
 * Investigate options to reverse colors of subtitle (Seems like some subs for black/white movies are inverted colors, see Harakiri subs).
 * Add option to remove creator stamp (to avoid messing with srt-pgs comparison order).
 * Add option to delete subs in the output folder.
-* Add preview for .pgs subtitles.
 
 ## Quick Start
 

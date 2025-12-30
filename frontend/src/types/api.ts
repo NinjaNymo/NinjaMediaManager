@@ -124,6 +124,12 @@ export interface PgsImageResponse {
   image: string  // Base64-encoded BMP image
 }
 
+export interface PgsPreviewResponse {
+  index: number
+  total_count: number
+  image: string  // Base64-encoded BMP image
+}
+
 export interface SubtitleEditRequest {
   path: string
   index: number

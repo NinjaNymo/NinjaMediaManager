@@ -181,6 +181,13 @@ class PgsImageResponse(BaseModel):
     image: str  # Base64-encoded PNG image
 
 
+class PgsPreviewResponse(BaseModel):
+    """Response for PGS/SUP file preview"""
+    index: int
+    total_count: int  # Total number of subtitles in the SUP file
+    image: str  # Base64-encoded BMP image
+
+
 class SubtitleEditRequest(BaseModel):
     """Request to edit a subtitle entry"""
     path: str

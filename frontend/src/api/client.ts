@@ -88,6 +88,11 @@ export const subtitlesApi = {
       `/subtitles/pgs-image?path=${encodeURIComponent(path)}&index=${index}`
     ),
 
+  getPgsPreview: (path: string, index: number) =>
+    fetchApi<import('../types/api').PgsPreviewResponse>(
+      `/subtitles/pgs-preview?path=${encodeURIComponent(path)}&index=${index}`
+    ),
+
   editSubtitle: (path: string, index: number, newText: string) =>
     fetchApi<import('../types/api').SubtitleEditResponse>('/subtitles/edit', {
       method: 'POST',

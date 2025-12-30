@@ -14,7 +14,8 @@ from backend.models.schemas import (
     OCRRequest, OCRResponse,
     CompareRequest, CompareResult,
     SubtitleInfoResponse, SpellCheckRequest, SpellCheckResponse,
-    SpellCheckIssue, IssueType, PgsImageResponse, SubtitleEditRequest, SubtitleEditResponse,
+    SpellCheckIssue, IssueType, PgsImageResponse, PgsPreviewResponse,
+    SubtitleEditRequest, SubtitleEditResponse,
     AddStampRequest, AddStampResponse, CheckStampCollisionResponse,
 )
 from spellchecker import SpellChecker
@@ -522,6 +523,89 @@ async def get_pgs_image(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image extraction failed: {str(e)}")
+
+
+@router.get("/pgs-preview", response_model=PgsPreviewResponse)
+async def get_pgs_preview(
+    path: str = Query(..., description="Path to SUP file"),
+    index: int = Query(0, description="Subtitle index number (0-based)"),
+):
+    """
+    Get a preview image from a PGS/SUP subtitle file.
+    Returns the image and total count for navigation.
+    Total count is determined by trying to extract until failure.
+    """
+    full_path = validate_output_path(path)
+
+    if not full_path.suffix.lower() == '.sup':
+        raise HTTPException(status_code=400, detail="Path must be a SUP file")
+
+    try:
+        # Validate index is not negative
+        if index < 0:
+            raise HTTPException(status_code=400, detail="Index must be non-negative")
+
+        # Get the image for the requested index
+        # pgs-to-srt uses 1-based indexing for image export
+        img_cmd = [
+            "deno",
+            "run",
+            "--allow-read",
+            "/opt/pgs-to-srt/pgs-to-srt.js",
+            str(index + 1),  # Convert to 1-based index
+            str(full_path),
+        ]
+
+        img_process = await asyncio.create_subprocess_exec(
+            *img_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        img_stdout, img_stderr = await img_process.communicate()
+
+        if img_process.returncode != 0 or not img_stdout:
+            if index == 0:
+                raise HTTPException(status_code=404, detail="No subtitles found in SUP file")
+            else:
+                raise HTTPException(status_code=404, detail=f"No image found for subtitle {index + 1}")
+
+        image_base64 = base64.b64encode(img_stdout).decode('ascii')
+
+        # Try to determine if there's a next subtitle by checking index+2
+        # This lets us know if we're at the end
+        next_cmd = [
+            "deno",
+            "run",
+            "--allow-read",
+            "/opt/pgs-to-srt/pgs-to-srt.js",
+            str(index + 2),  # Check next one
+            str(full_path),
+        ]
+
+        next_process = await asyncio.create_subprocess_exec(
+            *next_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        next_stdout, _ = await next_process.communicate()
+        has_next = next_process.returncode == 0 and bool(next_stdout)
+
+        # We don't know exact total, but we can indicate if there's more
+        # Use -1 to indicate "unknown total" or calculate based on has_next
+        # For now, return index+2 if has_next, else index+1 as total
+        total_count = index + 2 if has_next else index + 1
+
+        return PgsPreviewResponse(
+            index=index,
+            total_count=total_count,
+            image=image_base64,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PGS preview failed: {str(e)}")
 
 
 @router.post("/edit", response_model=SubtitleEditResponse)

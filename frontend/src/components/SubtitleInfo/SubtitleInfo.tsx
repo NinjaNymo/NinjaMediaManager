@@ -4,7 +4,7 @@ import { subtitlesApi } from '../../api/client'
 import { FileItem, SpellCheckIssue } from '../../types/api'
 import {
   FileText, Clock, HardDrive, Loader2, CheckCircle, AlertCircle,
-  SpellCheck, ChevronDown, Image, Save, X, Stamp
+  SpellCheck, ChevronDown, ChevronLeft, ChevronRight, Image, Save, X, Stamp
 } from 'lucide-react'
 
 interface SubtitleInfoProps {
@@ -48,6 +48,11 @@ export function SubtitleInfo({ file }: SubtitleInfoProps) {
     hasStamp: boolean
   } | null>(null)
   const [stampMessage, setStampMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  // PGS preview state for SUP files
+  const [pgsPreviewIndex, setPgsPreviewIndex] = useState(0)
+  const [pgsPreviewTotal, setPgsPreviewTotal] = useState(0)
+  const [pgsPreviewImage, setPgsPreviewImage] = useState<string | null>(null)
+  const [pgsPreviewLoading, setPgsPreviewLoading] = useState(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['subtitleInfo', file.path],
@@ -152,6 +157,29 @@ export function SubtitleInfo({ file }: SubtitleInfoProps) {
     }
   }, [file.path])
 
+  // Load PGS preview for SUP files
+  const loadPgsPreview = async (index: number) => {
+    setPgsPreviewLoading(true)
+    try {
+      const result = await subtitlesApi.getPgsPreview(file.path, index)
+      setPgsPreviewImage(result.image)
+      setPgsPreviewIndex(result.index)
+      setPgsPreviewTotal(result.total_count)
+    } catch (err) {
+      console.error('Failed to load PGS preview:', err)
+      setPgsPreviewImage(null)
+    } finally {
+      setPgsPreviewLoading(false)
+    }
+  }
+
+  // Load initial PGS preview for SUP files
+  useEffect(() => {
+    if (file.name.toLowerCase().endsWith('.sup')) {
+      loadPgsPreview(0)
+    }
+  }, [file.path])
+
   const handleSaveEdit = () => {
     const currentIssue = issues[currentIssueIndex]
     if (currentIssue && editText !== currentIssue.text) {
@@ -190,6 +218,7 @@ export function SubtitleInfo({ file }: SubtitleInfoProps) {
   }
 
   const isSRT = file.name.toLowerCase().endsWith('.srt')
+  const isSUP = file.name.toLowerCase().endsWith('.sup')
 
   if (isLoading) {
     return (
@@ -669,12 +698,75 @@ export function SubtitleInfo({ file }: SubtitleInfoProps) {
         </div>
       )}
 
-      {/* Preview section */}
-      {data?.preview && (
+      {/* Preview section - Text preview for non-SUP files */}
+      {data?.preview && !isSUP && (
         <div className="mb-6">
           <h3 className="text-lg font-medium text-matrix-green mb-3">Preview</h3>
           <div className="bg-matrix-bg border border-matrix-dim rounded-lg p-4 font-mono text-sm text-matrix-darkgreen whitespace-pre-wrap max-h-96 overflow-auto">
             {data.preview}
+          </div>
+        </div>
+      )}
+
+      {/* PGS Preview section - for SUP files */}
+      {isSUP && (
+        <div className="mb-6">
+          <h3 className="flex items-center gap-2 text-lg font-medium text-matrix-green mb-3">
+            <Image className="w-5 h-5 text-matrix-glow" />
+            PGS Preview
+          </h3>
+
+          <div className="bg-matrix-bg border border-matrix-dim rounded-lg p-4 space-y-4">
+            {/* Navigation */}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => loadPgsPreview(pgsPreviewIndex - 1)}
+                disabled={pgsPreviewLoading || pgsPreviewIndex <= 0}
+                className="flex items-center gap-1 px-3 py-2 bg-matrix-dim/30 hover:bg-matrix-dim/50 text-matrix-green rounded text-sm disabled:opacity-50 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Previous
+              </button>
+
+              <div className="text-sm text-matrix-dim">
+                {pgsPreviewImage ? (
+                  <span>Subtitle {pgsPreviewIndex + 1}{pgsPreviewTotal > pgsPreviewIndex + 1 ? '+' : ''}</span>
+                ) : pgsPreviewLoading ? (
+                  <span>Loading...</span>
+                ) : (
+                  <span>No subtitles</span>
+                )}
+              </div>
+
+              <button
+                onClick={() => loadPgsPreview(pgsPreviewIndex + 1)}
+                disabled={pgsPreviewLoading || pgsPreviewIndex >= pgsPreviewTotal - 1}
+                className="flex items-center gap-1 px-3 py-2 bg-matrix-dim/30 hover:bg-matrix-dim/50 text-matrix-green rounded text-sm disabled:opacity-50 transition-colors"
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Image display */}
+            <div className="flex items-center justify-center min-h-32 bg-black/30 rounded-lg p-4">
+              {pgsPreviewLoading ? (
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="w-8 h-8 animate-spin text-matrix-dim" />
+                  <span className="text-sm text-matrix-dim">Loading subtitle image...</span>
+                </div>
+              ) : pgsPreviewImage ? (
+                <img
+                  src={`data:image/bmp;base64,${pgsPreviewImage}`}
+                  alt={`Subtitle ${pgsPreviewIndex + 1}`}
+                  className="max-w-full rounded border border-matrix-dim"
+                />
+              ) : (
+                <div className="text-sm text-matrix-dim">
+                  No image available
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
