@@ -12,7 +12,7 @@
   <Category>MediaApp:Video</Category>
   <WebUI>http://[IP]:[PORT:8080]</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/NinjaNymo/NinjaMediaManager/master/unraid-template.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/NinjaNymo/NinjaMediaManager/master/frontend/public/ninja.svg</Icon>
+  <Icon>https://raw.githubusercontent.com/NinjaNymo/NinjaMediaManager/master/frontend/public/penrose-matrix.svg</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>
