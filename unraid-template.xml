@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>NinjaMediaManager</Name>
+  <Repository>ghcr.io/ninjanymo/ninjamediamanager:latest</Repository>
+  <Registry>https://github.com/NinjaNymo/NinjaMediaManager/pkgs/container/ninjamediamanager</Registry>
+  <Network>bridge</Network>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/NinjaNymo/NinjaMediaManager/issues</Support>
+  <Project>https://github.com/NinjaNymo/NinjaMediaManager</Project>
+  <Overview>A Docker-based web tool for managing MKV subtitles. Extract subtitle tracks, OCR PGS (image-based) subtitles to SRT, spell-check results, and add creator stamps.</Overview>
+  <Category>MediaApp:Video</Category>
+  <WebUI>http://[IP]:[PORT:8080]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/NinjaNymo/NinjaMediaManager/master/unraid-template.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/NinjaNymo/NinjaMediaManager/master/frontend/public/ninja.svg</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled></DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp" Description="Web interface port" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Media Path" Target="/media" Default="/mnt/user/media" Mode="ro" Description="Path to your media files (read-only)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media</Config>
+  <Config Name="Output Path" Target="/output" Default="/mnt/user/appdata/ninjamediamanager/output" Mode="rw" Description="Path where extracted subtitles are saved" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/ninjamediamanager/output</Config>
+  <Config Name="Config Path" Target="/config" Default="/mnt/user/appdata/ninjamediamanager/config" Mode="rw" Description="Path for app configuration" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/ninjamediamanager/config</Config>
+</Container>
