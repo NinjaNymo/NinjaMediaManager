@@ -33,7 +33,7 @@ volumes:
 
 ## Credits
 
-- [pgs-to-srt](https://github.com/Tentacule/PgsToSrt) - PGS subtitle OCR (Deno/Tesseract)
+- [pgs-to-srt](https://github.com/wydengyre/pgs-to-srt) - PGS subtitle OCR (Deno/Tesseract)
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) - Text recognition
 - [FFmpeg](https://ffmpeg.org/) - Media processing
 - [MKVToolNix](https://mkvtoolnix.download/) - MKV container tools
