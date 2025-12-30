@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { subtitlesApi } from '../../api/client'
 import { FileItem, SpellCheckIssue } from '../../types/api'
@@ -55,6 +55,8 @@ export function SubtitleInfo({ file, onDeleted }: SubtitleInfoProps) {
   const [pgsPreviewTotal, setPgsPreviewTotal] = useState(0)
   const [pgsPreviewImage, setPgsPreviewImage] = useState<string | null>(null)
   const [pgsPreviewLoading, setPgsPreviewLoading] = useState(false)
+  // Track the subtitle index we're editing so we can return to it after spell check refresh
+  const editedSubtitleIndexRef = useRef<number | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['subtitleInfo', file.path],
@@ -64,8 +66,28 @@ export function SubtitleInfo({ file, onDeleted }: SubtitleInfoProps) {
   const spellCheckMutation = useMutation({
     mutationFn: () => subtitlesApi.spellCheck(file.path, spellCheckOptions),
     onSuccess: (result) => {
-      setIssues(result.issues || [])
-      setCurrentIssueIndex(0)
+      const newIssues = result.issues || []
+      setIssues(newIssues)
+
+      // If we just edited a subtitle, try to find an issue on the same or next subtitle
+      if (editedSubtitleIndexRef.current !== null) {
+        const editedIndex = editedSubtitleIndexRef.current
+        // First try to find an issue on the same subtitle (in case there are more issues)
+        let newIssueIndex = newIssues.findIndex(issue => issue.index === editedIndex)
+        // If no issue on same subtitle, find the next subtitle with an issue
+        if (newIssueIndex === -1) {
+          newIssueIndex = newIssues.findIndex(issue => issue.index > editedIndex)
+        }
+        // If still no issue found, stay at the end or go to 0
+        if (newIssueIndex === -1 && newIssues.length > 0) {
+          newIssueIndex = Math.min(currentIssueIndex, newIssues.length - 1)
+        }
+        setCurrentIssueIndex(Math.max(0, newIssueIndex))
+        editedSubtitleIndexRef.current = null
+      } else {
+        setCurrentIssueIndex(0)
+      }
+
       setInvalidCharCount(result.invalid_char_count)
       setSpellingCount(result.spelling_count)
       setHasPgsSource(result.has_pgs_source)
@@ -77,8 +99,10 @@ export function SubtitleInfo({ file, onDeleted }: SubtitleInfoProps) {
   const editMutation = useMutation({
     mutationFn: ({ index, newText }: { index: number; newText: string }) =>
       subtitlesApi.editSubtitle(file.path, index, newText),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       setIsEditing(false)
+      // Store the subtitle index we just edited so we can return to it
+      editedSubtitleIndexRef.current = variables.index
       // Re-run spell check to refresh issues
       spellCheckMutation.mutate()
       // Invalidate subtitle info to refresh preview

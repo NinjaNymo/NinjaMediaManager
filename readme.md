@@ -6,10 +6,6 @@ A Docker-based web tool for managing MKV subtitles. Extract subtitle tracks, OCR
 
 ## To-Do:
 
-* Change how editing .srts work:
-  * Currently, doing an edit and saving it will reset the process and go back to the first subtitle.
-  * Change it so that editing is always active (meaning user can always type text, replace "edit" button with "save").
-  * Saving should not go back to first subtitle.
 * Investigate options to reverse colors of subtitle (Seems like some subs for black/white movies are inverted colors, see Harakiri subs).
 
 ## Quick Start
