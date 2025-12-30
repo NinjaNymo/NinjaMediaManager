@@ -16,7 +16,7 @@ from backend.models.schemas import (
     SubtitleInfoResponse, SpellCheckRequest, SpellCheckResponse,
     SpellCheckIssue, IssueType, PgsImageResponse, PgsPreviewResponse,
     SubtitleEditRequest, SubtitleEditResponse,
-    AddStampRequest, AddStampResponse, CheckStampCollisionResponse,
+    AddStampRequest, AddStampResponse, RemoveStampResponse, CheckStampCollisionResponse,
 )
 from spellchecker import SpellChecker
 from backend.services.subtitle_extractor import SubtitleExtractor
@@ -812,3 +812,58 @@ async def add_stamp(request: AddStampRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Add stamp failed: {str(e)}")
+
+
+@router.post("/remove-stamp", response_model=RemoveStampResponse)
+async def remove_stamp(path: str = Query(..., description="Path to SRT file")):
+    """
+    Remove a creator stamp from an SRT file.
+    The stamp is identified by checking if the first subtitle contains NinjaMediaManager markers.
+    All remaining subtitles are re-indexed starting from 1.
+    """
+    full_path = validate_output_path(path)
+
+    if not full_path.suffix.lower() == '.srt':
+        raise HTTPException(status_code=400, detail="Only SRT files are supported")
+
+    try:
+        content = full_path.read_text(encoding='utf-8', errors='replace')
+        entries = parse_srt_file(content)
+
+        if not entries:
+            return RemoveStampResponse(
+                success=False,
+                message="No subtitles found in file",
+            )
+
+        # Check if stamp exists
+        if not has_existing_stamp(entries):
+            return RemoveStampResponse(
+                success=False,
+                message="No creator stamp found in this file",
+            )
+
+        # Remove the first entry (the stamp) and re-index remaining entries
+        new_content_parts = []
+        new_index = 1
+
+        for entry in entries[1:]:  # Skip the first entry (stamp)
+            new_content_parts.append(str(new_index))
+            new_content_parts.append(f"{entry['start_time']} --> {entry['end_time']}")
+            new_content_parts.append(entry['text'])
+            new_content_parts.append("")
+            new_index += 1
+
+        new_content = '\n'.join(new_content_parts)
+
+        # Write back to file
+        full_path.write_text(new_content, encoding='utf-8')
+
+        return RemoveStampResponse(
+            success=True,
+            message="Creator stamp removed successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Remove stamp failed: {str(e)}")

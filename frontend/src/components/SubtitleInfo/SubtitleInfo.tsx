@@ -4,7 +4,7 @@ import { subtitlesApi } from '../../api/client'
 import { FileItem, SpellCheckIssue } from '../../types/api'
 import {
   FileText, Clock, HardDrive, Loader2, CheckCircle, AlertCircle,
-  SpellCheck, ChevronDown, ChevronLeft, ChevronRight, Image, Save, X, Stamp
+  SpellCheck, ChevronDown, ChevronLeft, ChevronRight, Image, Save, X, Stamp, Trash2
 } from 'lucide-react'
 
 interface SubtitleInfoProps {
@@ -117,6 +117,23 @@ export function SubtitleInfo({ file }: SubtitleInfoProps) {
             hasStamp: false,
           })
         }
+      }
+    },
+    onError: (error: Error) => {
+      setStampMessage({ type: 'error', text: error.message })
+    },
+  })
+
+  const removeStampMutation = useMutation({
+    mutationFn: () => subtitlesApi.removeStamp(file.path),
+    onSuccess: (result) => {
+      if (result.success) {
+        setStampMessage({ type: 'success', text: result.message })
+        setStampCollision({ hasCollision: false, collidingIndices: [], hasStamp: false })
+        // Invalidate subtitle info to refresh preview
+        queryClient.invalidateQueries({ queryKey: ['subtitleInfo', file.path] })
+      } else {
+        setStampMessage({ type: 'error', text: result.message })
       }
     },
     onError: (error: Error) => {
@@ -592,9 +609,46 @@ export function SubtitleInfo({ file }: SubtitleInfoProps) {
           <div className="bg-matrix-bg border border-matrix-dim rounded-lg p-4 space-y-4">
             {/* Check if stamp already exists */}
             {stampCollision?.hasStamp ? (
-              <div className="flex items-center gap-2 text-matrix-glow">
-                <CheckCircle className="w-5 h-5" />
-                <span>Creator stamp already exists in this file</span>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-matrix-glow">
+                  <CheckCircle className="w-5 h-5" />
+                  <span>Creator stamp already exists in this file</span>
+                </div>
+
+                {/* Status message */}
+                {stampMessage && (
+                  <div
+                    className={`flex items-start gap-2 p-3 rounded-lg ${
+                      stampMessage.type === 'success'
+                        ? 'bg-matrix-dim/20 border border-matrix-darkgreen text-matrix-green'
+                        : 'bg-red-900/20 border border-red-800 text-red-500'
+                    }`}
+                  >
+                    {stampMessage.type === 'success' ? (
+                      <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    )}
+                    <span className="text-sm">{stampMessage.text}</span>
+                  </div>
+                )}
+
+                {/* Remove stamp button */}
+                <button
+                  onClick={() => {
+                    setStampMessage(null)
+                    removeStampMutation.mutate()
+                  }}
+                  disabled={removeStampMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-900/30 hover:bg-red-900/50 border border-red-800 rounded text-sm font-medium disabled:opacity-50 text-red-400 transition-colors"
+                >
+                  {removeStampMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  Remove Creator Stamp
+                </button>
               </div>
             ) : (
               <>

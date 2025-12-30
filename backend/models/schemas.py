@@ -217,6 +217,12 @@ class AddStampResponse(BaseModel):
     colliding_subtitles: list[int] = []  # Indices of conflicting subtitles
 
 
+class RemoveStampResponse(BaseModel):
+    """Response after removing a stamp"""
+    success: bool
+    message: str
+
+
 class CheckStampCollisionResponse(BaseModel):
     """Response from checking stamp collision"""
     collision: bool

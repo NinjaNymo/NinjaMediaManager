@@ -113,6 +113,12 @@ export const subtitlesApi = {
       method: 'POST',
       body: JSON.stringify(request),
     }),
+
+  removeStamp: (path: string) =>
+    fetchApi<import('../types/api').RemoveStampResponse>(
+      `/subtitles/remove-stamp?path=${encodeURIComponent(path)}`,
+      { method: 'POST' }
+    ),
 }
 
 // Health API

@@ -155,6 +155,11 @@ export interface AddStampResponse {
   colliding_subtitles: number[]
 }
 
+export interface RemoveStampResponse {
+  success: boolean
+  message: string
+}
+
 export interface CheckStampCollisionResponse {
   collision: boolean
   colliding_subtitles: number[]
