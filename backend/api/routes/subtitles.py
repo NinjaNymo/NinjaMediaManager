@@ -355,6 +355,10 @@ async def spell_check_subtitle(request: SpellCheckRequest):
     if not full_path.suffix.lower() == '.srt':
         raise HTTPException(status_code=400, detail="Spell check only supported for SRT files")
 
+    # Create a task for tracking progress
+    task = task_manager.create_task(f"Spell check: {full_path.name}")
+    task_manager.start_task(task)
+
     try:
         content = full_path.read_text(encoding='utf-8', errors='replace')
         replacements_made = 0
@@ -379,8 +383,12 @@ async def spell_check_subtitle(request: SpellCheckRequest):
         if file_modified:
             full_path.write_text(content, encoding='utf-8')
 
+        task_manager.update_progress(task, 10)
+        await asyncio.sleep(0)  # Yield to event loop for SSE updates
+
         # Stage 2: Find invalid characters
         entries = parse_srt_file(content)
+        total_entries = len(entries)
         issues: list[SpellCheckIssue] = []
         invalid_char_count = 0
         spelling_count = 0
@@ -388,7 +396,10 @@ async def spell_check_subtitle(request: SpellCheckRequest):
         # Allowed characters: letters, digits, whitespace, and common punctuation
         allowed_pattern = re.compile(r'[a-zA-Z0-9\s!?.,:\-"\'\n\r…—–\'\'""()]')
 
-        for entry in entries:
+        # Calculate update interval for 10% granularity (stage 2 is 10-30%, so 2% per update = 10 updates)
+        stage2_interval = max(1, total_entries // 10)
+
+        for idx, entry in enumerate(entries):
             text = entry['text']
             for pos, char in enumerate(text):
                 if char not in '\n\r' and not allowed_pattern.match(char):
@@ -403,6 +414,15 @@ async def spell_check_subtitle(request: SpellCheckRequest):
                         character=char,
                     ))
                     invalid_char_count += 1
+
+            # Update progress at 10% intervals (stage 2 is 10-30%)
+            if total_entries > 0 and idx > 0 and idx % stage2_interval == 0:
+                progress = 10 + int((idx / total_entries) * 20)
+                task_manager.update_progress(task, progress)
+                await asyncio.sleep(0)  # Yield to event loop for SSE updates
+
+        task_manager.update_progress(task, 30)
+        await asyncio.sleep(0)  # Yield to event loop for SSE updates
 
         # Check if corresponding .sup file exists for PGS comparison
         sup_path = full_path.with_suffix('.sup')
@@ -420,7 +440,10 @@ async def spell_check_subtitle(request: SpellCheckRequest):
         # Pattern to extract words (alphanumeric sequences)
         word_pattern = re.compile(r"[a-zA-Z]+(?:'[a-zA-Z]+)?")
 
-        for entry in entries:
+        # Calculate update interval for 10% granularity (stage 3 is 30-95%, so 6.5% per update = ~10 updates)
+        stage3_interval = max(1, total_entries // 10)
+
+        for idx, entry in enumerate(entries):
             text = entry['text']
             # Find all words in the subtitle text
             for match in word_pattern.finditer(text):
@@ -448,6 +471,20 @@ async def spell_check_subtitle(request: SpellCheckRequest):
                     ))
                     spelling_count += 1
 
+            # Update progress at 10% intervals (stage 3 is 30-95%)
+            if total_entries > 0 and idx > 0 and idx % stage3_interval == 0:
+                progress = 30 + int((idx / total_entries) * 65)
+                task_manager.update_progress(task, progress)
+                await asyncio.sleep(0)  # Yield to event loop for SSE updates
+
+        # Log completion summary
+        task_manager.log(task, f"Checked {total_entries} subtitles")
+        task_manager.complete_task(task, {
+            "replacements": replacements_made,
+            "invalid_chars": invalid_char_count,
+            "spelling_issues": spelling_count,
+        })
+
         return SpellCheckResponse(
             path=request.path,
             replacements_made=replacements_made,
@@ -456,7 +493,11 @@ async def spell_check_subtitle(request: SpellCheckRequest):
             spelling_count=spelling_count,
             has_pgs_source=has_pgs_source,
         )
+    except HTTPException:
+        task_manager.fail_task(task, "Spell check failed")
+        raise
     except Exception as e:
+        task_manager.fail_task(task, str(e))
         raise HTTPException(status_code=500, detail=f"Spell check failed: {str(e)}")
 
 

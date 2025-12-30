@@ -208,6 +208,32 @@ export function SubtitleInfo({ file, onDeleted }: SubtitleInfoProps) {
     },
   })
 
+  // Reset state when file changes
+  useEffect(() => {
+    setShowDeleteConfirm(false)
+    setIssues([])
+    setCurrentIssueIndex(0)
+    setInvalidCharCount(0)
+    setSpellingCount(0)
+    setHasPgsSource(false)
+    setPgsImage(null)
+    setPgsImageLoading(false)
+    setEditText('')
+    setIsEditing(false)
+    setStampCollision(null)
+    setStampMessage(null)
+    setPgsPreviewIndex(0)
+    setPgsPreviewTotal(0)
+    setPgsPreviewImage(null)
+    setPgsPreviewLoading(false)
+    editedSubtitleIndexRef.current = null
+    setSdhResult(null)
+    // Reset mutation states to clear previous results
+    spellCheckMutation.reset()
+    sdhRemovalMutation.reset()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file.path])
+
   // Load PGS image when viewing an issue with PGS source
   const loadPgsImage = async (subtitleIndex: number) => {
     if (!hasPgsSource) return
