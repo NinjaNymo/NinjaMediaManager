@@ -11,7 +11,7 @@
   <Overview>A Docker-based web tool for managing MKV subtitles. Extract subtitle tracks, OCR PGS (image-based) subtitles to SRT, spell-check results, and add creator stamps.</Overview>
   <Category>MediaApp:Video</Category>
   <WebUI>http://[IP]:[PORT:8080]</WebUI>
-  <TemplateURL>https://raw.githubusercontent.com/NinjaNymo/NinjaMediaManager/master/unraid-template.xml</TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/NinjaNymo/NinjaMediaManager/master/templates/NinjaNymo/NinjaMediaManager.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/NinjaNymo/NinjaMediaManager/master/frontend/public/penrose-matrix.svg</Icon>
   <ExtraParams/>
   <PostArgs/>
