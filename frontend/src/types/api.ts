@@ -170,3 +170,19 @@ export interface DeleteSubtitleResponse {
   success: boolean
   message: string
 }
+
+export type SDHFormat = 'brackets'
+
+export interface SDHRemovalRequest {
+  path: string
+  sdh_format: SDHFormat
+  remove_dangling_dashes: boolean
+}
+
+export interface SDHRemovalResponse {
+  success: boolean
+  message: string
+  entries_removed: number
+  entries_modified: number
+  total_removals: number
+}

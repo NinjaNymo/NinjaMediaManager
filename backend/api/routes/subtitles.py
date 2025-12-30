@@ -18,6 +18,7 @@ from backend.models.schemas import (
     SubtitleEditRequest, SubtitleEditResponse,
     AddStampRequest, AddStampResponse, RemoveStampResponse, DeleteSubtitleResponse,
     CheckStampCollisionResponse,
+    SDHRemovalRequest, SDHRemovalResponse,
 )
 from spellchecker import SpellChecker
 from backend.services.subtitle_extractor import SubtitleExtractor
@@ -286,8 +287,8 @@ async def get_subtitle_info(path: str = Query(..., description="Path to subtitle
                 last_time = entries[-1]['end_time']
                 duration = format_duration(parse_srt_time(last_time))
 
-            # Generate preview (first 3 entries)
-            for entry in entries[:3]:
+            # Generate full preview (all entries)
+            for entry in entries:
                 preview_lines.append(f"{entry['index']}")
                 preview_lines.append(f"{entry['start_time']} --> {entry['end_time']}")
                 preview_lines.append(entry['text'])
@@ -903,3 +904,162 @@ async def delete_subtitle(path: str = Query(..., description="Path to subtitle f
         raise HTTPException(status_code=403, detail="Permission denied")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+
+
+def process_sdh_text(text: str, remove_dashes: bool) -> str | None:
+    """
+    Process a single subtitle text entry to remove SDH content.
+    Returns cleaned text or None if entry should be deleted.
+
+    Handles:
+    1. Complete removal of fully bracketed lines
+    2. Partial removal of [speaker] tags
+    3. Multi-line partial removal
+    4. Dangling dash removal (optional)
+    5. Line break cleanup
+    """
+    # Remove all bracketed content (non-greedy to handle multiple brackets)
+    cleaned = re.sub(r'\[.*?\]', '', text)
+
+    # Split into lines and process each
+    lines = cleaned.split('\n')
+    processed_lines = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        # Skip lines that are just a dash or dash with whitespace
+        if remove_dashes and line in ['-', '- ']:
+            continue
+        processed_lines.append(line)
+
+    # Handle dangling dashes when only one line remains
+    if remove_dashes and len(processed_lines) == 1:
+        line = processed_lines[0]
+        # If line starts with dash followed by space or nothing else meaningful
+        if line.startswith('-') and len(line) > 1:
+            # Remove leading dash and clean up
+            cleaned_line = line[1:].strip()
+            if cleaned_line:
+                processed_lines[0] = cleaned_line
+            else:
+                processed_lines = []
+
+    # If all lines became empty after removing bracketed content and dashes
+    if not processed_lines:
+        return None
+
+    # Join and return
+    result = '\n'.join(processed_lines).strip()
+    return result if result else None
+
+
+@router.post("/sdh-remove", response_model=SDHRemovalResponse)
+async def remove_sdh(request: SDHRemovalRequest):
+    """
+    Remove SDH (Subtitles for the Deaf and Hard of Hearing) lines from an SRT file.
+
+    SDH lines include:
+    - Sound descriptions: [bones crackle], [music playing]
+    - Speaker tags: [Rahim], [Chibuzo]
+    - Action descriptions: [laughs], [sighs]
+
+    Processing:
+    1. Remove all [bracketed] content
+    2. Clean up empty lines and whitespace
+    3. Optionally remove dangling dashes
+    4. Re-index remaining subtitles
+    """
+    full_path = validate_output_path(request.path)
+
+    if not full_path.suffix.lower() == '.srt':
+        raise HTTPException(status_code=400, detail="SDH removal only supported for SRT files")
+
+    try:
+        content = full_path.read_text(encoding='utf-8', errors='replace')
+        entries = parse_srt_file(content)
+
+        if not entries:
+            return SDHRemovalResponse(
+                success=True,
+                message="No subtitles found in file",
+                entries_removed=0,
+                entries_modified=0,
+                total_removals=0,
+            )
+
+        # Track statistics
+        entries_removed = 0
+        entries_modified = 0
+        total_removals = 0
+
+        # Process each entry
+        new_entries = []
+        for entry in entries:
+            original_text = entry['text']
+
+            # Count brackets in original text
+            bracket_count = len(re.findall(r'\[.*?\]', original_text))
+            total_removals += bracket_count
+
+            # Process the text
+            processed_text = process_sdh_text(
+                original_text,
+                remove_dashes=request.remove_dangling_dashes
+            )
+
+            if processed_text is None:
+                # Entry should be completely removed
+                entries_removed += 1
+            elif processed_text != original_text:
+                # Entry was modified but not removed
+                entries_modified += 1
+                new_entries.append({
+                    'start_time': entry['start_time'],
+                    'end_time': entry['end_time'],
+                    'text': processed_text,
+                })
+            else:
+                # Entry unchanged
+                new_entries.append({
+                    'start_time': entry['start_time'],
+                    'end_time': entry['end_time'],
+                    'text': original_text,
+                })
+
+        # Rebuild SRT file with re-indexed entries
+        new_content_parts = []
+        for idx, entry in enumerate(new_entries, start=1):
+            new_content_parts.append(str(idx))
+            new_content_parts.append(f"{entry['start_time']} --> {entry['end_time']}")
+            new_content_parts.append(entry['text'])
+            new_content_parts.append('')  # Blank line between entries
+
+        new_content = '\n'.join(new_content_parts)
+
+        # Write back to file
+        full_path.write_text(new_content, encoding='utf-8')
+
+        # Build response message
+        if entries_removed == 0 and entries_modified == 0:
+            message = "No SDH content found"
+        else:
+            parts = []
+            if entries_removed > 0:
+                parts.append(f"removed {entries_removed} entries")
+            if entries_modified > 0:
+                parts.append(f"modified {entries_modified} entries")
+            message = f"SDH removal complete: {', '.join(parts)}"
+
+        return SDHRemovalResponse(
+            success=True,
+            message=message,
+            entries_removed=entries_removed,
+            entries_modified=entries_modified,
+            total_removals=total_removals,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SDH removal failed: {str(e)}")

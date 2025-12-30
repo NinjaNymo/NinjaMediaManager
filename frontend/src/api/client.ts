@@ -125,6 +125,19 @@ export const subtitlesApi = {
       `/subtitles/delete?path=${encodeURIComponent(path)}`,
       { method: 'DELETE' }
     ),
+
+  removeSDH: (path: string, options: {
+    sdhFormat: import('../types/api').SDHFormat
+    removeDanglingDashes: boolean
+  }) =>
+    fetchApi<import('../types/api').SDHRemovalResponse>('/subtitles/sdh-remove', {
+      method: 'POST',
+      body: JSON.stringify({
+        path,
+        sdh_format: options.sdhFormat,
+        remove_dangling_dashes: options.removeDanglingDashes,
+      }),
+    }),
 }
 
 // Health API

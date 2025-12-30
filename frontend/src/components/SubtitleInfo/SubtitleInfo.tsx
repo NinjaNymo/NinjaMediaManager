@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { subtitlesApi } from '../../api/client'
-import { FileItem, SpellCheckIssue } from '../../types/api'
+import { FileItem, SpellCheckIssue, SDHFormat } from '../../types/api'
 import {
   FileText, Clock, HardDrive, Loader2, CheckCircle, AlertCircle,
-  SpellCheck, ChevronDown, ChevronLeft, ChevronRight, Image, Save, X, Stamp, Trash2
+  SpellCheck, ChevronDown, ChevronLeft, ChevronRight, Image, Save, X, Stamp, Trash2, Subtitles
 } from 'lucide-react'
 
 interface SubtitleInfoProps {
@@ -57,6 +57,18 @@ export function SubtitleInfo({ file, onDeleted }: SubtitleInfoProps) {
   const [pgsPreviewLoading, setPgsPreviewLoading] = useState(false)
   // Track the subtitle index we're editing so we can return to it after spell check refresh
   const editedSubtitleIndexRef = useRef<number | null>(null)
+  // SDH removal state
+  const [sdhOptions, setSdhOptions] = useState({
+    format: 'brackets' as SDHFormat,
+    removeDanglingDashes: true,
+  })
+  const [sdhResult, setSdhResult] = useState<{
+    success: boolean
+    message: string
+    entriesRemoved: number
+    entriesModified: number
+    totalRemovals: number
+  } | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['subtitleInfo', file.path],
@@ -175,6 +187,24 @@ export function SubtitleInfo({ file, onDeleted }: SubtitleInfoProps) {
         queryClient.invalidateQueries({ queryKey: ['outputFiles'] })
         onDeleted?.()
       }
+    },
+  })
+
+  const sdhRemovalMutation = useMutation({
+    mutationFn: () => subtitlesApi.removeSDH(file.path, {
+      sdhFormat: sdhOptions.format,
+      removeDanglingDashes: sdhOptions.removeDanglingDashes,
+    }),
+    onSuccess: (result) => {
+      setSdhResult({
+        success: result.success,
+        message: result.message,
+        entriesRemoved: result.entries_removed,
+        entriesModified: result.entries_modified,
+        totalRemovals: result.total_removals,
+      })
+      // Refresh subtitle info to show updated preview
+      queryClient.invalidateQueries({ queryKey: ['subtitleInfo', file.path] })
     },
   })
 
@@ -678,6 +708,99 @@ export function SubtitleInfo({ file, onDeleted }: SubtitleInfoProps) {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SDH Removal Section - only for SRT files */}
+      {isSRT && (
+        <div className="mb-6">
+          <h3 className="flex items-center gap-2 text-lg font-medium text-matrix-green mb-3">
+            <Subtitles className="w-5 h-5 text-matrix-glow" />
+            SDH Removal
+          </h3>
+
+          <div className="bg-matrix-bg border border-matrix-dim rounded-lg p-4 space-y-4">
+            {/* Options */}
+            <div className="space-y-4">
+              {/* SDH Format dropdown */}
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-matrix-darkgreen">SDH Format:</label>
+                <div className="relative">
+                  <select
+                    value={sdhOptions.format}
+                    onChange={(e) => {
+                      setSdhOptions({ ...sdhOptions, format: e.target.value as SDHFormat })
+                      setSdhResult(null)
+                    }}
+                    className="appearance-none bg-matrix-bg border border-matrix-dim rounded px-3 py-1.5 pr-8 text-sm text-matrix-green focus:outline-none focus:border-matrix-green"
+                  >
+                    <option value="brackets">[Brackets]</option>
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-matrix-dim pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Remove dangling dashes checkbox */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sdhOptions.removeDanglingDashes}
+                  onChange={(e) => {
+                    setSdhOptions({ ...sdhOptions, removeDanglingDashes: e.target.checked })
+                    setSdhResult(null)
+                  }}
+                  className="w-4 h-4 rounded border-matrix-dim bg-matrix-bg text-matrix-green focus:ring-matrix-green"
+                />
+                <span className="text-sm text-matrix-darkgreen">
+                  Remove dangling dashes
+                </span>
+              </label>
+            </div>
+
+            {/* Run button */}
+            <button
+              onClick={() => {
+                setSdhResult(null)
+                sdhRemovalMutation.mutate()
+              }}
+              disabled={sdhRemovalMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-matrix-darkgreen hover:bg-matrix-green hover:text-black rounded text-sm font-medium disabled:opacity-50 text-matrix-green transition-colors"
+            >
+              {sdhRemovalMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Subtitles className="w-4 h-4" />
+              )}
+              Remove SDH Lines
+            </button>
+
+            {/* Results */}
+            {sdhResult && (
+              <div className="mt-4">
+                <div className={`flex items-start gap-2 p-3 rounded-lg ${
+                  sdhResult.totalRemovals > 0
+                    ? 'bg-matrix-dim/20 border border-matrix-darkgreen text-matrix-green'
+                    : 'bg-matrix-dim/10 border border-matrix-dim text-matrix-dim'
+                }`}>
+                  <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">{sdhResult.message}</div>
+                    {sdhResult.totalRemovals > 0 && (
+                      <div className="text-xs text-matrix-darkgreen">
+                        {sdhResult.entriesRemoved > 0 && (
+                          <div>• Removed {sdhResult.entriesRemoved} subtitle entries</div>
+                        )}
+                        {sdhResult.entriesModified > 0 && (
+                          <div>• Modified {sdhResult.entriesModified} entries</div>
+                        )}
+                        <div>• {sdhResult.totalRemovals} bracketed sections processed</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>

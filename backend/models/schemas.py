@@ -234,3 +234,23 @@ class CheckStampCollisionResponse(BaseModel):
     collision: bool
     colliding_subtitles: list[int] = []
     has_stamp: bool = False  # True if stamp already exists in file
+
+
+class SDHFormat(str, Enum):
+    BRACKETS = "brackets"  # [text] format
+
+
+class SDHRemovalRequest(BaseModel):
+    """Request to remove SDH (hearing impaired) lines from an SRT file"""
+    path: str
+    sdh_format: SDHFormat = SDHFormat.BRACKETS
+    remove_dangling_dashes: bool = True
+
+
+class SDHRemovalResponse(BaseModel):
+    """Response after SDH removal"""
+    success: bool
+    message: str
+    entries_removed: int = 0      # Fully deleted subtitle entries
+    entries_modified: int = 0     # Entries with partial removal
+    total_removals: int = 0       # Total bracketed sections removed
