@@ -7,6 +7,21 @@ A Docker-based web tool for managing MKV subtitles. Extract subtitle tracks, OCR
 ## To-Do:
 
 * Add / to I character replacement.
+* Add “ and ” to " character replacement.
+* Change how character replacement works:
+  * Instead of multiple fields, add a Replace tickbox followed by a editable text field.
+  * Text field shall be populated by default with
+    * |=I, /=I
+* Meaning the user can quickly add more character replacements on the fly as comma separated keys.
+* Add Ignore text field with tickbox where user can add characters/words that are ignored by spell checker.
+* Change how editing .srts work:
+  * Currently, doing an edit and saving it will reset the process and go back to the first subtitle.
+  * Change it so that editing is always active (meaning user can always type text, replace "edit" button with "save").
+  * Saving should not go back to first subtitle.
+* Investigate options to reverse colors of subtitle (Seems like some subs for black/white movies are inverted colors, see Harakiri subs).
+* Add option to remove creator stamp (to avoid messing with srt-pgs comparison order).
+* Add option to delete subs in the output folder.
+* Add preview for .pgs subtitles.
 
 ## Quick Start
 
