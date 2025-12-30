@@ -4,6 +4,10 @@ A Docker-based web tool for managing MKV subtitles. Extract subtitle tracks, OCR
 
 **Warning:** This project was vibe-coded with AI assistance. Use at your own risk.
 
+## To-Do:
+
+* Add / to I character replacement.
+
 ## Quick Start
 
 ```bash
