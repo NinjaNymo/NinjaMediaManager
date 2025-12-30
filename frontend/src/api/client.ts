@@ -64,13 +64,21 @@ export const subtitlesApi = {
   getInfo: (path: string) =>
     fetchApi<import('../types/api').SubtitleInfoResponse>(`/subtitles/info?path=${encodeURIComponent(path)}`),
 
-  spellCheck: (path: string, options: { replacePipeWithI: boolean; replaceFancyApostrophe: boolean; language: string }) =>
+  spellCheck: (path: string, options: {
+    replacementsEnabled: boolean
+    replacements: string
+    ignoreEnabled: boolean
+    ignoreList: string
+    language: string
+  }) =>
     fetchApi<import('../types/api').SpellCheckResponse>('/subtitles/spell-check', {
       method: 'POST',
       body: JSON.stringify({
         path,
-        replace_pipe_with_i: options.replacePipeWithI,
-        replace_fancy_apostrophe: options.replaceFancyApostrophe,
+        replacements_enabled: options.replacementsEnabled,
+        replacements: options.replacements,
+        ignore_enabled: options.ignoreEnabled,
+        ignore_list: options.ignoreList,
         language: options.language,
       }),
     }),

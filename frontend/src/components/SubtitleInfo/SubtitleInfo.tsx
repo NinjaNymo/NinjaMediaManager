@@ -12,16 +12,20 @@ interface SubtitleInfoProps {
 }
 
 interface SpellCheckOptions {
-  replacePipeWithI: boolean
-  replaceFancyApostrophe: boolean
+  replacementsEnabled: boolean
+  replacements: string
+  ignoreEnabled: boolean
+  ignoreList: string
   language: string
 }
 
 export function SubtitleInfo({ file }: SubtitleInfoProps) {
   const queryClient = useQueryClient()
   const [spellCheckOptions, setSpellCheckOptions] = useState<SpellCheckOptions>({
-    replacePipeWithI: true,
-    replaceFancyApostrophe: true,
+    replacementsEnabled: true,
+    replacements: '|=I,\'=\',/=I,"=","="',
+    ignoreEnabled: false,
+    ignoreList: '',
     language: 'en',
   })
   const [issues, setIssues] = useState<SpellCheckIssue[]>([])
@@ -240,36 +244,72 @@ export function SubtitleInfo({ file }: SubtitleInfoProps) {
 
           <div className="bg-matrix-bg border border-matrix-dim rounded-lg p-4 space-y-4">
             {/* Options */}
-            <div className="space-y-3">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={spellCheckOptions.replacePipeWithI}
-                  onChange={(e) => setSpellCheckOptions({
-                    ...spellCheckOptions,
-                    replacePipeWithI: e.target.checked,
-                  })}
-                  className="w-4 h-4 rounded border-matrix-dim bg-matrix-bg text-matrix-green focus:ring-matrix-green"
-                />
-                <span className="text-sm text-matrix-darkgreen">
-                  Replace "|" with "I"
-                </span>
-              </label>
+            <div className="space-y-4">
+              {/* Replace option */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={spellCheckOptions.replacementsEnabled}
+                    onChange={(e) => setSpellCheckOptions({
+                      ...spellCheckOptions,
+                      replacementsEnabled: e.target.checked,
+                    })}
+                    className="w-4 h-4 rounded border-matrix-dim bg-matrix-bg text-matrix-green focus:ring-matrix-green"
+                  />
+                  <span className="text-sm text-matrix-darkgreen">
+                    Replace
+                  </span>
+                </label>
+                {spellCheckOptions.replacementsEnabled && (
+                  <input
+                    type="text"
+                    value={spellCheckOptions.replacements}
+                    onChange={(e) => setSpellCheckOptions({
+                      ...spellCheckOptions,
+                      replacements: e.target.value,
+                    })}
+                    placeholder="|=I,/=I"
+                    className="w-full bg-matrix-bg border border-matrix-dim rounded px-3 py-2 text-sm text-matrix-green font-mono focus:outline-none focus:border-matrix-green"
+                  />
+                )}
+                <div className="text-xs text-matrix-dim">
+                  Format: old=new, comma-separated (e.g., |=I,/=I)
+                </div>
+              </div>
 
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={spellCheckOptions.replaceFancyApostrophe}
-                  onChange={(e) => setSpellCheckOptions({
-                    ...spellCheckOptions,
-                    replaceFancyApostrophe: e.target.checked,
-                  })}
-                  className="w-4 h-4 rounded border-matrix-dim bg-matrix-bg text-matrix-green focus:ring-matrix-green"
-                />
-                <span className="text-sm text-matrix-darkgreen">
-                  Replace "'" with "'"
-                </span>
-              </label>
+              {/* Ignore option */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={spellCheckOptions.ignoreEnabled}
+                    onChange={(e) => setSpellCheckOptions({
+                      ...spellCheckOptions,
+                      ignoreEnabled: e.target.checked,
+                    })}
+                    className="w-4 h-4 rounded border-matrix-dim bg-matrix-bg text-matrix-green focus:ring-matrix-green"
+                  />
+                  <span className="text-sm text-matrix-darkgreen">
+                    Ignore
+                  </span>
+                </label>
+                {spellCheckOptions.ignoreEnabled && (
+                  <input
+                    type="text"
+                    value={spellCheckOptions.ignoreList}
+                    onChange={(e) => setSpellCheckOptions({
+                      ...spellCheckOptions,
+                      ignoreList: e.target.value,
+                    })}
+                    placeholder="Gandalf,Frodo,™"
+                    className="w-full bg-matrix-bg border border-matrix-dim rounded px-3 py-2 text-sm text-matrix-green font-mono focus:outline-none focus:border-matrix-green"
+                  />
+                )}
+                <div className="text-xs text-matrix-dim">
+                  Words/characters to skip (comma-separated)
+                </div>
+              </div>
 
               <div className="flex items-center gap-3">
                 <label className="text-sm text-matrix-darkgreen">Language:</label>

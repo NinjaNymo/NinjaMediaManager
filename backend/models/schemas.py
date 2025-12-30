@@ -136,8 +136,14 @@ class SubtitleInfoResponse(BaseModel):
 class SpellCheckRequest(BaseModel):
     """Request for spell check operation"""
     path: str
-    replace_pipe_with_i: bool = True
-    replace_fancy_apostrophe: bool = True
+    # New unified replacement system: "key=value,key=value" format
+    # e.g., "|=I,'=',/=I,\"=\",\"=\""
+    replacements_enabled: bool = True
+    replacements: str = "|=I,'=',/=I,\"=\",\"=\""
+    # Ignore list for spell checker and illegal character detection
+    # Comma-separated words/characters to skip
+    ignore_enabled: bool = False
+    ignore_list: str = ""
     language: str = "en"
 
 

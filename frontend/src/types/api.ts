@@ -101,6 +101,15 @@ export interface SpellCheckIssue {
   suggestions: string[]
 }
 
+export interface SpellCheckRequest {
+  path: string
+  replacements_enabled: boolean
+  replacements: string  // Format: "key=value,key=value" e.g., "|=I,'=',/=I"
+  ignore_enabled: boolean
+  ignore_list: string  // Comma-separated words/characters to ignore
+  language: string
+}
+
 export interface SpellCheckResponse {
   path: string
   replacements_made: number

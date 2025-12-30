@@ -308,13 +308,44 @@ async def get_subtitle_info(path: str = Query(..., description="Path to subtitle
         raise HTTPException(status_code=500, detail=f"Failed to read subtitle: {str(e)}")
 
 
+def parse_replacements(replacements_str: str) -> list[tuple[str, str]]:
+    """
+    Parse replacement string in format: key=value,key=value
+    e.g., "|=I,'=',/=I" -> [('|', 'I'), (''', "'"), ('/', 'I')]
+    """
+    pairs = []
+    if not replacements_str.strip():
+        return pairs
+
+    # Split by comma, but handle escaped commas if needed
+    parts = replacements_str.split(',')
+    for part in parts:
+        part = part.strip()
+        if '=' in part:
+            key, value = part.split('=', 1)
+            if key and value is not None:  # Allow empty value for deletion
+                pairs.append((key, value))
+    return pairs
+
+
+def parse_ignore_list(ignore_str: str) -> set[str]:
+    """
+    Parse ignore list: comma-separated words/characters
+    e.g., "Gandalf,Frodo,™" -> {'Gandalf', 'Frodo', '™'}
+    """
+    if not ignore_str.strip():
+        return set()
+    return {item.strip() for item in ignore_str.split(',') if item.strip()}
+
+
 @router.post("/spell-check", response_model=SpellCheckResponse)
 async def spell_check_subtitle(request: SpellCheckRequest):
     """
     Perform spell check on an SRT subtitle file.
 
-    Stage 1: Replace "|" with "I" if enabled
-    Stage 2: Find invalid characters (not a-zA-Z or allowed punctuation: ! ? . , : - ")
+    Stage 1: Apply character replacements from user-defined list
+    Stage 2: Find invalid characters (not in allowed set, excluding ignored)
+    Stage 3: Dictionary-based spell checking (excluding ignored words)
     """
     full_path = validate_output_path(request.path)
 
@@ -325,20 +356,22 @@ async def spell_check_subtitle(request: SpellCheckRequest):
         content = full_path.read_text(encoding='utf-8', errors='replace')
         replacements_made = 0
         file_modified = False
-        # Stage 1a: Replace | with I
-        if request.replace_pipe_with_i:
-            pipe_count = content.count('|')
-            if pipe_count > 0:
-                content = content.replace('|', 'I')
-                replacements_made += pipe_count
-                file_modified = True
-        # Stage 1b: Replace fancy apostrophe with standard apostrophe
-        if request.replace_fancy_apostrophe:
-            apos_count = content.count('\u2019')
-            if apos_count > 0:
-                content = content.replace('\u2019', "'")
-                replacements_made += apos_count
-                file_modified = True
+
+        # Parse ignore list
+        ignore_set = set()
+        if request.ignore_enabled and request.ignore_list:
+            ignore_set = parse_ignore_list(request.ignore_list)
+
+        # Stage 1: Apply character replacements
+        if request.replacements_enabled and request.replacements:
+            replacement_pairs = parse_replacements(request.replacements)
+            for old_char, new_char in replacement_pairs:
+                count = content.count(old_char)
+                if count > 0:
+                    content = content.replace(old_char, new_char)
+                    replacements_made += count
+                    file_modified = True
+
         # Write file if any replacements were made
         if file_modified:
             full_path.write_text(content, encoding='utf-8')
@@ -350,13 +383,15 @@ async def spell_check_subtitle(request: SpellCheckRequest):
         spelling_count = 0
 
         # Allowed characters: letters, digits, whitespace, and common punctuation
-        # Note: We check each character that's NOT in the allowed set
         allowed_pattern = re.compile(r'[a-zA-Z0-9\s!?.,:\-"\'\n\r…—–\'\'""()]')
 
         for entry in entries:
             text = entry['text']
             for pos, char in enumerate(text):
                 if char not in '\n\r' and not allowed_pattern.match(char):
+                    # Skip if character is in ignore list
+                    if char in ignore_set:
+                        continue
                     issues.append(SpellCheckIssue(
                         type=IssueType.INVALID_CHARACTER,
                         index=entry['index'],
@@ -389,6 +424,10 @@ async def spell_check_subtitle(request: SpellCheckRequest):
                 word = match.group()
                 # Skip very short words and words that are all caps (likely acronyms)
                 if len(word) <= 2 or (word.isupper() and len(word) <= 4):
+                    continue
+
+                # Skip if word is in ignore list (case-insensitive check)
+                if word in ignore_set or word.lower() in {w.lower() for w in ignore_set}:
                     continue
 
                 # Check if word is misspelled
