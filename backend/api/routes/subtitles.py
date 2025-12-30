@@ -16,7 +16,8 @@ from backend.models.schemas import (
     SubtitleInfoResponse, SpellCheckRequest, SpellCheckResponse,
     SpellCheckIssue, IssueType, PgsImageResponse, PgsPreviewResponse,
     SubtitleEditRequest, SubtitleEditResponse,
-    AddStampRequest, AddStampResponse, RemoveStampResponse, CheckStampCollisionResponse,
+    AddStampRequest, AddStampResponse, RemoveStampResponse, DeleteSubtitleResponse,
+    CheckStampCollisionResponse,
 )
 from spellchecker import SpellChecker
 from backend.services.subtitle_extractor import SubtitleExtractor
@@ -867,3 +868,38 @@ async def remove_stamp(path: str = Query(..., description="Path to SRT file")):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Remove stamp failed: {str(e)}")
+
+
+@router.delete("/delete", response_model=DeleteSubtitleResponse)
+async def delete_subtitle(path: str = Query(..., description="Path to subtitle file")):
+    """
+    Delete a subtitle file (.srt or .sup) from the output directory.
+    """
+    full_path = validate_output_path(path)
+
+    # Only allow deleting subtitle files
+    allowed_extensions = {'.srt', '.sup', '.ass', '.ssa', '.sub'}
+    if full_path.suffix.lower() not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only subtitle files can be deleted ({', '.join(allowed_extensions)})"
+        )
+
+    try:
+        if not full_path.exists():
+            return DeleteSubtitleResponse(
+                success=False,
+                message="File not found",
+            )
+
+        # Delete the file
+        full_path.unlink()
+
+        return DeleteSubtitleResponse(
+            success=True,
+            message=f"Deleted {full_path.name}",
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")

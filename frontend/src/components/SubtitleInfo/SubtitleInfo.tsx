@@ -9,6 +9,7 @@ import {
 
 interface SubtitleInfoProps {
   file: FileItem
+  onDeleted?: () => void  // Callback when file is deleted
 }
 
 interface SpellCheckOptions {
@@ -19,8 +20,9 @@ interface SpellCheckOptions {
   language: string
 }
 
-export function SubtitleInfo({ file }: SubtitleInfoProps) {
+export function SubtitleInfo({ file, onDeleted }: SubtitleInfoProps) {
   const queryClient = useQueryClient()
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [spellCheckOptions, setSpellCheckOptions] = useState<SpellCheckOptions>({
     replacementsEnabled: true,
     replacements: '|=I,\'=\',/=I,"=","="',
@@ -138,6 +140,17 @@ export function SubtitleInfo({ file }: SubtitleInfoProps) {
     },
     onError: (error: Error) => {
       setStampMessage({ type: 'error', text: error.message })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => subtitlesApi.deleteSubtitle(file.path),
+    onSuccess: (result) => {
+      if (result.success) {
+        // Invalidate queries and call callback
+        queryClient.invalidateQueries({ queryKey: ['outputFiles'] })
+        onDeleted?.()
+      }
     },
   })
 
@@ -259,26 +272,75 @@ export function SubtitleInfo({ file }: SubtitleInfoProps) {
     <div className="h-full overflow-auto p-6 bg-matrix-bg">
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-matrix-green mb-2">{file.name}</h2>
-        <div className="flex items-center gap-4 text-sm text-matrix-dim">
-          <span className="flex items-center gap-1">
-            <HardDrive className="w-4 h-4" />
-            {formatSize(file.size)}
-          </span>
-          {data?.line_count && (
-            <span className="flex items-center gap-1">
-              <FileText className="w-4 h-4" />
-              {data.line_count} subtitles
-            </span>
-          )}
-          {data?.duration && (
-            <span className="flex items-center gap-1">
-              <Clock className="w-4 h-4" />
-              {data.duration}
-            </span>
-          )}
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-matrix-green mb-2">{file.name}</h2>
+            <div className="flex items-center gap-4 text-sm text-matrix-dim">
+              <span className="flex items-center gap-1">
+                <HardDrive className="w-4 h-4" />
+                {formatSize(file.size)}
+              </span>
+              {data?.line_count && (
+                <span className="flex items-center gap-1">
+                  <FileText className="w-4 h-4" />
+                  {data.line_count} subtitles
+                </span>
+              )}
+              {data?.duration && (
+                <span className="flex items-center gap-1">
+                  <Clock className="w-4 h-4" />
+                  {data.duration}
+                </span>
+              )}
+            </div>
+          </div>
+          {/* Delete button */}
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="flex items-center gap-1 px-3 py-1.5 bg-red-900/30 hover:bg-red-900/50 border border-red-800 rounded text-sm text-red-400 transition-colors"
+            title="Delete file"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete
+          </button>
         </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-matrix-bg border border-matrix-dim rounded-lg p-6 max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-matrix-green mb-3">Delete File?</h3>
+            <p className="text-matrix-darkgreen mb-4">
+              Are you sure you want to delete <span className="text-matrix-green font-medium">{file.name}</span>?
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 bg-matrix-dim/30 hover:bg-matrix-dim/50 text-matrix-green rounded text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  deleteMutation.mutate()
+                  setShowDeleteConfirm(false)
+                }}
+                disabled={deleteMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-red-900/50 hover:bg-red-700 border border-red-800 rounded text-sm text-red-300 transition-colors disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Spell Check Section - only for SRT files */}
       {isSRT && (

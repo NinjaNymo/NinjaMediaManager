@@ -165,3 +165,8 @@ export interface CheckStampCollisionResponse {
   colliding_subtitles: number[]
   has_stamp: boolean
 }
+
+export interface DeleteSubtitleResponse {
+  success: boolean
+  message: string
+}

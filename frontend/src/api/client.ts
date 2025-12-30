@@ -119,6 +119,12 @@ export const subtitlesApi = {
       `/subtitles/remove-stamp?path=${encodeURIComponent(path)}`,
       { method: 'POST' }
     ),
+
+  deleteSubtitle: (path: string) =>
+    fetchApi<import('../types/api').DeleteSubtitleResponse>(
+      `/subtitles/delete?path=${encodeURIComponent(path)}`,
+      { method: 'DELETE' }
+    ),
 }
 
 // Health API

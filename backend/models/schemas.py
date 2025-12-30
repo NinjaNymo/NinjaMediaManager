@@ -223,6 +223,12 @@ class RemoveStampResponse(BaseModel):
     message: str
 
 
+class DeleteSubtitleResponse(BaseModel):
+    """Response after deleting a subtitle file"""
+    success: bool
+    message: str
+
+
 class CheckStampCollisionResponse(BaseModel):
     """Response from checking stamp collision"""
     collision: bool

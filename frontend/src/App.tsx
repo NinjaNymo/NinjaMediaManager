@@ -49,7 +49,7 @@ function App() {
           ) : (
             // Output tab - show subtitle info
             selectedFile ? (
-              <SubtitleInfo file={selectedFile} />
+              <SubtitleInfo file={selectedFile} onDeleted={() => setSelectedFile(null)} />
             ) : (
               <div className="h-full flex items-center justify-center text-matrix-dim">
                 <div className="text-center">
