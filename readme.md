@@ -8,6 +8,7 @@ A Docker-based web tool for managing MKV subtitles. Extract subtitle tracks, OCR
 
 * Add ♪Music♪ format option to SDH remover.
 * Investigate options to reverse colors of subtitle (Seems like some subs for black/white movies are inverted colors, see Harakiri subs).
+* When performing edits in spell checking, avoid re-running spell-checker every time you click save.
 
 ## Quick Start
 
